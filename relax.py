@@ -100,33 +100,51 @@ def map_of_stations(ncfile,f_lat,f_lon,title,res):
     plt.show()
     
 
-def choose_month(ds,m_num,var,clima_var_m,levels,double_int = False):
+def choose_month(ds,m_num,var,clima_var_m,levels,double_int = False,int_num = 1):
     # get 1 month data 
     month_ds = ds.where(ds.date_time.dt.month == m_num, drop=True)
     # group by depth, find mean
-    month_mean = month_ds.groupby(month_ds['var1']).mean()
-    month_depth = month_mean.var1.values.copy()
-    month_df = month_mean.to_dataframe()
-    nonnan = len(month_df[var]) - np.count_nonzero(np.isnan(month_df[var])) 
-    #print (nonnan)
-    if nonnan > 5 : #print (nonnan,month_df[var])       
-         
-        # interpolate nans 
-        var = (month_df[var].interpolate(kind = 'nearest'))
-        if np.isnan(var[0]) :
-            var[0] = var[1]
-        f = interpolate.UnivariateSpline(month_depth,var,k=3)
-        var_m = f(levels)
-        if double_int == True:
-            for n in range(0,3):
-                f = interpolate.UnivariateSpline(levels,var_m,k=3)
-                var_m = f(levels)
-    else: 
-  
-        var_m = clima_var_m 
+    try:
+        month_mean = month_ds.groupby(month_ds['var1']).mean()     
+        month_depth = month_mean.var1.values.copy()
+        month_df = month_mean.to_dataframe()
+        # check for nans 
+        nonnan = len(month_df[var]) - np.count_nonzero(np.isnan(month_df[var])) 
+        if nonnan > 10 :       
+            # interpolate nans 
+            var = (month_df[var].interpolate(kind = 'nearest'))
+            #if np.isnan(var[0]) :
+            #    var[0] = var[1]
+            if np.count_nonzero(np.isnan(var)) > 0: 
+                #find first non nan 
+                for n,v in enumerate(var):
+                    if np.isnan(var[n]) == False: 
+                        pos = n                     
+                        for i in np.arange(0,pos):
+                            var[i] = var[pos]
+
+                        break
+                           
+            #f = interpolate.UnivariateSpline(month_depth,var,k=3)
+            f = interpolate.interp1d(month_depth,var)
+            var_m = f(levels)
+                            
+            var_m[var_m < 0] = 0
+
+            
+            if double_int == True:
+                for n in range(0,int_num):
+                    f = interpolate.UnivariateSpline(levels,var_m,k=2)
+                    var_m = f(levels)
+            print ("month with data num: ", m_num)        
+        else: 
+            #print ('many nans',m_num,month_df[var])
+            var_m = clima_var_m
+    except:
+        var_m = clima_var_m      
     return var_m,month_ds 
        
-def create_relax_array(ncfile,varname,pl,save,double_int = False):
+def create_relax_array(ncfile,varname,pl,save,levels,int_num = 1, double_int = False,only_clima_mean = False):
     
     funcs = {'Oxygen':'var4', 'Temperature': 'var2',
              'si':'var6','alk': 'var12','chl': 'var10',
@@ -151,13 +169,19 @@ def create_relax_array(ncfile,varname,pl,save,double_int = False):
     
     max_depth = np.int(np.max(ds.var1))
     # usually we don't need the data from all depths 
-    levels = np.arange(0,350,1) 
-           
+    
+    #levels = np.arange(0,350,1)       
     # get only data from 1960 and later 
-    ds = ds.where(ds.date_time.dt.year > 1960, drop=True)
+    if ncfile == 'data_from_WOD_COLLECTION_(2017-08-21T16-04-41).nc':
+        ds = ds.where(ds.var5 < 1.2, drop=True)
+        ds = ds.where(ds.var6 < 40, drop=True)
+    #ds = ds.where(ds.date_time.dt.year > 1960, drop=True)    
+    # only positive values
+    #ds = ds.where(ds[var_from_odv] >= 0, drop=True)
     
     # group by depth and find mean for each depth 
     clima_mean = ds.groupby(ds['var1']).mean()
+    
     clima_depth = clima_mean.var1.values.copy()
     clima_df = clima_mean.to_dataframe()
     
@@ -168,60 +192,73 @@ def create_relax_array(ncfile,varname,pl,save,double_int = False):
     if np.isnan(clima_var[0]) :
         clima_var[0] = clima_var[1]
         
-    # interpolate values to standart levels    
-    f = interpolate.UnivariateSpline(clima_depth,clima_var,k=3)
+    # interpolate values to standard levels    
+    f = interpolate.interp1d(clima_depth,clima_var) #,k=3
+    #            f = interpolate.interp1d(month_depth,var)
+    #        var_m = f(levels)
     clima_var_m = f(levels)
+    
     if double_int == True:
-        for n in range(0,3):
-            f1 = interpolate.UnivariateSpline(levels,clima_var_m,k=3)
-            clima_var_m = f1(levels)  
+        for n in range(0,int_num):
+            f1 = interpolate.UnivariateSpline(levels,clima_var_m,k=2)
+            clima_var_m = f1(levels)
        
     means = [] 
     depths = [] 
     days = []
     nday = 0 
+    clima_means = []
     numdays = {1:31,2:28,3:31,4:30,5:31,
                  6:30,7:31,8:31,9:30,10:31,
              11:30,12:31} 
 
     for n in range(1,13):
         #print (n)
-        m = choose_month(ds,n,var_from_odv,clima_var_m,levels,double_int)
-        var_m = m[0] 
-        var =  m[1] 
+        var_m, var = choose_month(ds,n,var_from_odv,clima_var_m,levels,double_int,int_num)
+        #var_m[var_m < 0.] = 0
+        #var_m = m[0] 
+        #var =  m[1] 
         maxday = numdays[n]
-
-                   
+             
         for s in range(0,maxday): 
             nday += 1  
             means.append(var_m)
             depths.append(levels)  
             days.append(np.repeat(nday, len(levels)))
-            
-        
-        
+            clima_means.append(clima_var_m)  
     if varname == 'Oxygen':
         means = np.array(means)*44.6     
-        clima_var_m = np.array(clima_var_m)*44.6  
+        clima_var_m = np.array(clima_var_m)*44.6 
+        clima_means = np.array(clima_means)*44.6 
+        ds[var_from_odv] = ds[var_from_odv]*44.6  
     elif varname == 'alk': 
         means = np.array(means)*1000     
-        clima_var_m = np.array(clima_var_m)*1000            
+        clima_var_m = np.array(clima_var_m)*1000   
+        clima_means = np.array(clima_means)*1000   
+        ds[var_from_odv] = ds[var_from_odv]*1000      
     if pl == True:
         plt.clf()
         plt.title(varname)  
-        plt.plot(clima_var_m,levels,'k',zorder = 10)
-        plt.plot(np.array(means).T,np.array(depths).T,
+        plt.plot(clima_var_m,levels,'ko-',zorder = 10)
+        if only_clima_mean  == False: 
+            plt.plot(np.array(means).T,np.array(depths).T,
                  '-',zorder = 8,alpha = 0.7)
-        plt.ylim(450,0)
+        plt.scatter(ds[var_from_odv],ds['var1'])
+        plt.ylim(90,0)
         #plt.show() 
-        plt.savefig('data/{}_relax_{}.png'.format(str(ncfile)[:-3],varname))      
-    means = np.ravel((np.array(means).T))
-    levels = np.ravel((np.array(depths).T))
-    days = np.ravel((np.array(days).T))
-    arr = np.vstack((days,levels,means)).T
-
+        plt.savefig('data/{}_relax_{}.png'.format(str(ncfile)[:-3],varname))   
+        means = np.ravel((np.array(means).T))
+        levels_f = np.ravel((np.array(depths).T))
+        days = np.ravel((np.array(days).T))
+        clima_means = np.ravel((np.array(clima_means).T))  
+             
+    if only_clima_mean == False:        
+        arr = np.vstack((days,levels_f,means)).T
+    else: 
+        arr = np.vstack((days,levels_f,clima_means)).T
+                
     if save == True:    
-        np.savetxt('data/{}_relax_{}.txt'.format(str(ncfile)[:-3],varname), (arr), delimiter=' ')           
+        np.savetxt('data/{}_relax_{}.dat'.format(str(ncfile)[:-3],varname), (arr), delimiter=' ')           
 
 def time_to_run():    
     import timeit
@@ -232,12 +269,36 @@ def time_to_run():
                                                    
 #map_of_stations('jossingfjorden-wod.nc',58.3, 6.3, r"Jossingfjorden",'l')
 #time_distribution('jossingfjorden-wod.nc',r"Jossingfjorden")
+#levels = (0,5,10,20,30,50,75,100,125,150,165) # 
+#for var in ('alk',,'po4','si', 'no3','Oxygen','pH'):   
+#    create_relax_array('jossingfjorden-wod.nc',var,
+#                       pl = True, save = True, levels,double_int = True) 
+#create_relax_array(ncfile,varname,pl,save,levels,int_num = 1, double_int = False):   
 
-for var in ('alk','chl','po4','si', 'no3','Oxygen','pH'):   
-    create_relax_array('jossingfjorden-wod.nc',var,
-                       pl = True, save = True,double_int = True) 
+dss = xr.open_dataset('ROMS_Laptev_Sea.nc')
+levels = sorted(dss.depth.values)
+#levels =  np.arange(0,100,1) #(1,3,5,7,10,20,30,50,75,100,110) # 
+def call_arctic() :
+    create_relax_array('data_from_WOD_COLLECTION_(2017-08-21T16-04-41).nc','Oxygen',
+                       True, True, levels,1, double_int = True,only_clima_mean = True) # Arctic
+    plt.cla()
+    create_relax_array('data_from_WOD_COLLECTION_(2017-08-21T16-04-41).nc','po4',
+                       True, True, levels,3, double_int = True,only_clima_mean =True) # Arctic
+    plt.cla()
+    create_relax_array('data_from_WOD_COLLECTION_(2017-08-21T16-04-41).nc','si',
+                       True, True, levels,10, double_int = True,only_clima_mean = True) # Arctic
+    plt.cla()
+    create_relax_array('data_from_WOD_COLLECTION_(2017-08-21T16-04-41).nc','no3',
+                       True, True, levels,3, double_int = True,only_clima_mean = True) # Arctic
+    plt.cla()
+    create_relax_array('data_from_WOD_COLLECTION_(2017-08-21T16-04-41).nc','alk',
+                       True, True, levels,1, double_int = True,only_clima_mean = True) # Arctic
+    plt.cla()
+    create_relax_array('data_from_WOD_COLLECTION_(2017-08-21T16-04-41).nc','pH',
+                       True, True, levels,3, double_int = True,only_clima_mean = True) # Arctic
+    
+call_arctic()    
+#create_relax_array('goldeneye-wod.nc','po4',True, False, levels, double_int = True) #
 
-#def call_fucns(var,nc):
-#create_relax_array('jossingfjorden-wod.nc','si',pl = True, save = False,double_int = True) #
-#create_relax_array('jossingfjorden-wod.nc','pH',pl = True, save = True,double_int = False)    
+#create_relax_array('jossingfjorden-wod.nc','Oxygen',pl = True, save = True,double_int = True)    
 #сreate_relax_array('jossingfjorden-wod.nc','Oxygen',pl = True, save = True,double_int = False)
