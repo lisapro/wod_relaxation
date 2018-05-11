@@ -275,9 +275,16 @@ def create_relax_array(ncfile,varname,pl,save,levels,axis,int_num = 1, double_in
                 
     return ds[var_from_odv], ds['var1'], np.array(means).T, np.array(depths).T
 
-def for_2d_interpolation(ncfile,varname,axis,axis2,axis3,axis4,file):
+def for_2d_interpolation(ncfile,varname,file):
     #def create_relax_array(ncfile,varname,pl,save,levels,axis,int_num = 1, double_int = False,only_clima_mean = False):
-    
+    fig  = plt.figure(figsize=(10,6), dpi=100 )    
+    gs = gridspec.GridSpec(2,2)
+    gs.update(hspace=0.3)
+    axis = fig.add_subplot(gs[0]) 
+    axis2 = fig.add_subplot(gs[1]) 
+    axis3 = fig.add_subplot(gs[2]) 
+    axis4 = fig.add_subplot(gs[3]) 
+        
     funcs = {'Oxygen':'var4', 'Temperature': 'var2',
              'si':'var6','alk': 'var12','chl': 'var10',
              'po4':'var5', 'no3':'var7','pH': 'var9'}  
@@ -349,16 +356,15 @@ def for_2d_interpolation(ncfile,varname,axis,axis2,axis3,axis4,file):
                          alpha = 1,cmap = cmap,s = 5,vmin = vmin, vmax = vmax)
          
     plt.colorbar(CS2, ax=axis2)     
-
-
-    
+   
     CS3 = axis3.scatter(X, Y,c = z_griddata,  alpha = 1,s = 1,cmap = cmap,vmin = vmin, vmax = vmax)
     axis3.set_title('Seasonal variability, griddata')
     #CS3 = axis3.contourf(xi, yi,z_griddata, levels = levels,cmap = cmap,vmin = vmin, vmax = vmax)    
     axis4.set_title('Seasonal variability, SmoothBivariateSpline')        
     CS4 = axis4.contourf(xi,yi,z_biv_spline,levels = levels, cmap= cmap,vmin = vmin,vmax = vmax) #contourf(xi, yi,z_biv_spline, cmap = cmap, levels = levels)
     #axis4.contour(xi, yi, z_griddata,linewidths=0.1,zorder = 10,levels = levels)
-     
+    fig.suptitle(r'{} $\mu M$'.format(varname))
+    fig.savefig('data/{}/smeaheia_wod_2d_{}.png'.format(str(ncfile)[:-3],varname))     
     
     #CS2 = axis2.contourf(xi,yi,z_griddata1,15,linewidths=0.5,)
     plt.colorbar(CS3, ax=axis3)
@@ -437,76 +443,71 @@ def call_arctic() :
         axis.set_ylim(90,0)
     plt.savefig('data/{}/arctic_wod.png'.format(str(ncfile)[:-3])) 
 
-def call_smeaheia(case,var = False) :
+def call_smeaheia_2d():
+    ncfile = 'data_from_WOD_COLLECTION_1500-1600_Smeaheia.nc'
+    file = open('data/data_from_WOD_COLLECTION_1500-1600_Smeaheia/smeaheia_Statistics_file.txt','w')    
+    #call_smeaheia('2d','po4')
+    #call_smeaheia()
+    
+    #plt.savefig('data/{}/smeaheia_wod.png'.format(str(ncfile)[:-3]))
+    
+    for_2d_interpolation(ncfile,'Oxygen',file)
+
+
+    #for_2d_interpolation(ncfile,'po4',ax,ax1,ax2,ax3,file)
+    #fig.suptitle(r'PO $_4\ \mu M$')
+    #fig.savefig('data/{}/smeaheia_wod_2d_po4.png'.format(str(ncfile)[:-3]))
+            
+    #axis3.set_title('griddata int gridsize = {}'.format(gridsize))
+    
+    plt.show()  
+    file.close()
+    
+def call_smeaheia() :
     ncfile = 'data_from_WOD_COLLECTION_1500-1600_Smeaheia.nc'
     levels = np.arange(0,300,2)
     save = False
-    
-    if case =='1d':
-         
-        fig  = plt.figure(figsize=(10,6), dpi=100 )    
-        gs = gridspec.GridSpec(2,3)
-        gs.update(hspace=0.3)
-        ax = fig.add_subplot(gs[0]) 
-        ax1 = fig.add_subplot(gs[1])
-        ax2 = fig.add_subplot(gs[2])     
-        ax3 = fig.add_subplot(gs[3])     
-        ax4 = fig.add_subplot(gs[4])     
-        ax5 = fig.add_subplot(gs[5])     
-            
-        create_relax_array(ncfile,'Oxygen',
-                           True, save, levels, ax,1,double_int = True, only_clima_mean = False) 
-        ax.set_title(r'O$_2\ \mu M$')   
-        #ax.legend(['mean','1','2','3','4','5','6','7','8','9','10','11','12'])
-        #ax.legend()
-         
-        create_relax_array(ncfile,'po4',
-                           True, save, levels,ax1,1, double_int = True,only_clima_mean =False)
-        ax1.set_title(r'PO$_4\ \mu M$') 
-        create_relax_array(ncfile,'si',
-                           True, save, levels,ax2,3 , double_int = True,only_clima_mean = False) 
-        ax2.set_title(r'Si $ \mu M$') 
-        ax2.set_xlim(0,12)
-        create_relax_array(ncfile,'no3',
-                           True, save, levels,ax3, 6, double_int = True,only_clima_mean = False)
-        ax3.set_title(r'NO$_3\ \mu M$') 
-        create_relax_array(ncfile,'alk',
-                           True, save, levels,ax4, 1, double_int = True,only_clima_mean = False) 
-        ax4.set_title(r'Alkalinity $\mu M$') 
-        ax4.set_xlim(1900,2600)
-        create_relax_array(ncfile,'pH',
-                           True, save, levels,ax5, 1, double_int = True,only_clima_mean = False) 
-        ax5.set_title(r'pH') 
-    
-        for axis in (ax,ax1,ax2,ax3,ax4,ax5):
-            axis.set_ylim(450,0)
-        #ax.set_ylim(450,0)
-    
-        plt.show()           
-        #plt.savefig('data/{}/smeaheia_wod.png'.format(str(ncfile)[:-3]))
-    elif case == '2d':
+     
+    fig  = plt.figure(figsize=(10,6), dpi=100 )    
+    gs = gridspec.GridSpec(2,3)
+    gs.update(hspace=0.3)
+    ax = fig.add_subplot(gs[0]) 
+    ax1 = fig.add_subplot(gs[1])
+    ax2 = fig.add_subplot(gs[2])     
+    ax3 = fig.add_subplot(gs[3])     
+    ax4 = fig.add_subplot(gs[4])     
+    ax5 = fig.add_subplot(gs[5])     
         
+    create_relax_array(ncfile,'Oxygen',
+                       True, save, levels, ax,1,double_int = True, only_clima_mean = False) 
+    ax.set_title(r'O$_2\ \mu M$')   
+    #ax.legend(['mean','1','2','3','4','5','6','7','8','9','10','11','12'])
+    #ax.legend()
+     
+    create_relax_array(ncfile,'po4',
+                       True, save, levels,ax1,1, double_int = True,only_clima_mean =False)
+    ax1.set_title(r'PO$_4\ \mu M$') 
+    create_relax_array(ncfile,'si',
+                       True, save, levels,ax2,3 , double_int = True,only_clima_mean = False) 
+    ax2.set_title(r'Si $ \mu M$') 
+    ax2.set_xlim(0,12)
+    create_relax_array(ncfile,'no3',
+                       True, save, levels,ax3, 6, double_int = True,only_clima_mean = False)
+    ax3.set_title(r'NO$_3\ \mu M$') 
+    create_relax_array(ncfile,'alk',
+                       True, save, levels,ax4, 1, double_int = True,only_clima_mean = False) 
+    ax4.set_title(r'Alkalinity $\mu M$') 
+    ax4.set_xlim(1900,2600)
+    create_relax_array(ncfile,'pH',
+                       True, save, levels,ax5, 1, double_int = True,only_clima_mean = False) 
+    ax5.set_title(r'pH') 
 
-        fig  = plt.figure(figsize=(10,6), dpi=100 )    
-        gs = gridspec.GridSpec(2,2)
-        gs.update(hspace=0.3)
-        ax = fig.add_subplot(gs[0]) 
-        ax1 = fig.add_subplot(gs[1]) 
-        ax2 = fig.add_subplot(gs[2]) 
-        ax3 = fig.add_subplot(gs[3])     
-        
-        
-        for_2d_interpolation(ncfile,var,ax,ax1,ax2,ax3,file)
-        fig.suptitle(r'{} $\mu M$'.format(var))
-        fig.savefig('data/{}/smeaheia_wod_2d_{}.png'.format(str(ncfile)[:-3],var))
+    for axis in (ax,ax1,ax2,ax3,ax4,ax5):
+        axis.set_ylim(450,0)
+    #ax.set_ylim(450,0)
 
-        #for_2d_interpolation(ncfile,'po4',ax,ax1,ax2,ax3,file)
-        #fig.suptitle(r'PO $_4\ \mu M$')
-        #fig.savefig('data/{}/smeaheia_wod_2d_po4.png'.format(str(ncfile)[:-3]))
-                
-        #axis3.set_title('griddata int gridsize = {}'.format(gridsize))
-        
-        #plt.show()     
+    plt.show()           
+   
     
 def call_jossingfjorden():
     levels = (0,5,10,20,30,50,75,100,125,150,165) #
@@ -610,13 +611,10 @@ def call_osterfjorden():
 
 
 #call_jossingfjorden()    
-#call_smeaheia('1d')
 
-file = open('data/data_from_WOD_COLLECTION_1500-1600_Smeaheia/smeaheia_Statistics_file.txt','w')    
-#call_smeaheia('2d','Oxygen')
-#call_smeaheia('2d','po4')
-call_smeaheia('1d','po4')
-file.close()
+call_smeaheia_2d()
+
+
 #call_arctic()     
 #call_osterfjorden()    
 #create_relax_array('goldeneye-wod.nc','po4',True, False, levels, double_int = True) #
