@@ -275,11 +275,11 @@ def create_relax_array(ncfile,varname,pl,save,levels,axis,int_num = 1, double_in
                 
     return ds[var_from_odv], ds['var1'], np.array(means).T, np.array(depths).T
 
-def for_2d_interpolation(ncfile,varname,file):
-    #def create_relax_array(ncfile,varname,pl,save,levels,axis,int_num = 1, double_int = False,only_clima_mean = False):
+def for_2d_interpolation(ncfile,varname,file,kxy = 1):
+    
     fig  = plt.figure(figsize=(10,6), dpi=100 )    
     gs = gridspec.GridSpec(2,2)
-    gs.update(hspace=0.3)
+    gs.update(left = 0.05,right = 0.97, hspace=0.4, wspace = 0.1)
     axis = fig.add_subplot(gs[0]) 
     axis2 = fig.add_subplot(gs[1]) 
     axis3 = fig.add_subplot(gs[2]) 
@@ -297,6 +297,8 @@ def for_2d_interpolation(ncfile,varname,file):
     ds = xr.open_dataset(ncfile)          
     df = ds.to_dataframe()
     df = df[df['var4'] > 3]
+    #df = df[df['var7'] < 50]    
+    df = df[df.date_time.dt.year > 1940]
     df = df[df.date_time.dt.dayofyear != 129.]
     #df = df.date_time.dropna(how='all')
         
@@ -306,12 +308,13 @@ def for_2d_interpolation(ncfile,varname,file):
     var2 = (np.array(df[var_from_odv])).flatten()     
   
     if varname == 'Oxygen':
-        #var = var * 44.6
         var2 = var2 * 44.6       
-        step = 1 
-    elif varname == 'po4':
-        step = 0.1 
-                        
+    elif varname == 'alk':
+        var2 = var2*1000    
+    steps = {'Oxygen': 1,'si': 0.1 ,'alk': 1,'chl': 0.01,
+             'po4':0.1, 'no3': 0.1,'pH': 0.01}  
+    step = steps[varname]     
+                          
     #Remove nans 
     depth2_nan = depth2[~np.isnan(depth2)]      
     var2_nan = var2[~np.isnan(depth2)]        
@@ -321,15 +324,19 @@ def for_2d_interpolation(ncfile,varname,file):
     var2_nan2 = var2_nan[~np.isnan(var2_nan)]        
     day_of_year_nan = day_of_year_nan[~np.isnan(var2_nan)] 
     
-  
     vmax = np.nanmax(var2_nan2)
     vmin = np.nanmin(var2_nan2)       
     file.write('\nMax over the whole period = {}'.format(vmax))     
     file.write('\nMin over the whole period = {}'.format(vmin))         
       
-    gridsize = 1   
+    gridsize = 2   
     xi = np.arange(0,366,gridsize)
-    yi = np.arange(0,370,gridsize)   
+    if varname == 'chl':
+        yi = np.arange(0,100,gridsize)          
+    else:        
+        yi = np.arange(0,370,gridsize)  
+
+         
     X,Y = np.meshgrid(xi,yi) 
     
     z_griddata = griddata((day_of_year_nan, depth2_nan),
@@ -338,15 +345,15 @@ def for_2d_interpolation(ncfile,varname,file):
 
     ##f_int2d = interpolate.interp2d(day_of_year_nan,depth2_nan,var2_nan2)
     ###zi_int2d = np.transpose(f_int2d(xi,yi)) 
-    f_biv_spline = interpolate.SmoothBivariateSpline(day_of_year_nan, depth2_nan, var2_nan2, kx=1, ky=1)   
+    f_biv_spline = interpolate.SmoothBivariateSpline(day_of_year_nan, depth2_nan, var2_nan2, kx=kxy, ky=kxy)   
     z_biv_spline = np.transpose(f_biv_spline (xi,yi)) 
-
 
     levels = np.arange(vmin,vmax,step)
    
-
-
     axis.set_title('Long-term variability, raw data')
+    for tick in axis.get_xticklabels():
+        tick.set_rotation(45)
+
     CS = axis.scatter(df.date_time.dt.date.values, depth2 ,
                       c = var2,alpha = 1,cmap = cmap,s = 5)   
     plt.colorbar(CS, ax=axis)
@@ -359,44 +366,28 @@ def for_2d_interpolation(ncfile,varname,file):
    
     CS3 = axis3.scatter(X, Y,c = z_griddata,  alpha = 1,s = 1,cmap = cmap,vmin = vmin, vmax = vmax)
     axis3.set_title('Seasonal variability, griddata')
-    #CS3 = axis3.contourf(xi, yi,z_griddata, levels = levels,cmap = cmap,vmin = vmin, vmax = vmax)    
-    axis4.set_title('Seasonal variability, SmoothBivariateSpline')        
-    CS4 = axis4.contourf(xi,yi,z_biv_spline,levels = levels, cmap= cmap,vmin = vmin,vmax = vmax) #contourf(xi, yi,z_biv_spline, cmap = cmap, levels = levels)
-    #axis4.contour(xi, yi, z_griddata,linewidths=0.1,zorder = 10,levels = levels)
-    fig.suptitle(r'{} $\mu M$'.format(varname))
-    fig.savefig('data/{}/smeaheia_wod_2d_{}.png'.format(str(ncfile)[:-3],varname))     
     
-    #CS2 = axis2.contourf(xi,yi,z_griddata1,15,linewidths=0.5,)
+    #CS3 = axis3.contourf(xi, yi,z_griddata,levels = levels ,cmap = cmap,vmin = vmin, vmax = vmax) 
+       
+    axis4.set_title('Seasonal variability, SmoothBivariateSpline')        
+    CS4 = axis4.contourf(xi,yi,z_biv_spline,levels = levels, cmap= cmap) #,vmin = vmin,vmax = vmax) 
+
+    if varname == 'pH': 
+        fig.suptitle(r'{}'.format(varname))      
+    else:
+        fig.suptitle(r'{} $\mu M$'.format(varname))
+    
     plt.colorbar(CS3, ax=axis3)
     plt.colorbar(CS4, ax=axis4)    
     for axis in (axis,axis2,axis3,axis4):  
         axis.set_ylim(370,0)
+        
+    for axis in (axis2,axis3,axis4):       
+        axis.set_xlim(0,365)
+        axis.set_xlabel('Day in a year')
+    fig.savefig('data/{}/smeaheia_wod_2d_{}.png'.format(str(ncfile)[:-3],varname)) 
 
-    # grid the data.
-  
-    #####zi = ma.masked_invalid(zi)
-
-
-    #print (zi)    
-    # contour the gridded data, plotting dots at the randomly spaced data points.
-    #CS = axis2.contour(xi,yi,zi,15,linewidths=0.5,colors='k')
-    ######################CS2 = axis2.contourf(xi,yi,zi,50,cmap= cmap,vmin = vmin,vmax =vmax)
-    #CS2 = axis2.contourf(xi,yi,zi1,15,)
-    #CS2 = axis2.pcolormesh(xi,yi,zi,cmap= cmap,vmin = vmin,vmax = vmax) #,15
-    #im = ax0.pcolormesh(x, y, z, cmap=cmap, norm=norm)
-
-    #plt.colorbar(CS2)
-    #for n in np.arange(0,len(depth[0,:])):
-    #    days.append(day_of_year.values)
-    #days = np.array(days).T    
-    #print (days.shape,depth.shape,var.shape)
-    
-
-
-    #znew = f([10,20,30,40,50,100], [0,50,100])
-    #plt.plot(x, z[0, :], 'ro-', xnew, znew[0, :], 'b-') #, w=None, bbox=[None, None, None, None], kx=3, ky=3, s=None, eps=None)[source]¶
-    
-    #axis2.scatter(day_of_year,depth,c = var,alpha = 0.6)
+    plt.clf()
       
 def time_to_run():    
     import timeit
@@ -451,16 +442,21 @@ def call_smeaheia_2d():
     
     #plt.savefig('data/{}/smeaheia_wod.png'.format(str(ncfile)[:-3]))
     
-    for_2d_interpolation(ncfile,'Oxygen',file)
-
-
+    for_2d_interpolation(ncfile,'Oxygen',file,1)
+    for_2d_interpolation(ncfile,'po4',file,1)
+    for_2d_interpolation(ncfile,'pH',file,3)
+    for_2d_interpolation(ncfile,'si',file,2)
+    for_2d_interpolation(ncfile,'alk',file,1)   
+    for_2d_interpolation(ncfile,'chl',file,1) 
+    for_2d_interpolation(ncfile,'no3',file,1)
+   
     #for_2d_interpolation(ncfile,'po4',ax,ax1,ax2,ax3,file)
     #fig.suptitle(r'PO $_4\ \mu M$')
-    #fig.savefig('data/{}/smeaheia_wod_2d_po4.png'.format(str(ncfile)[:-3]))
+    #
             
     #axis3.set_title('griddata int gridsize = {}'.format(gridsize))
     
-    plt.show()  
+      
     file.close()
     
 def call_smeaheia() :
@@ -470,7 +466,7 @@ def call_smeaheia() :
      
     fig  = plt.figure(figsize=(10,6), dpi=100 )    
     gs = gridspec.GridSpec(2,3)
-    gs.update(hspace=0.3)
+    gs.update(left = 0.04, right = 0.97,hspace=0.3)
     ax = fig.add_subplot(gs[0]) 
     ax1 = fig.add_subplot(gs[1])
     ax2 = fig.add_subplot(gs[2])     
@@ -505,8 +501,8 @@ def call_smeaheia() :
     for axis in (ax,ax1,ax2,ax3,ax4,ax5):
         axis.set_ylim(450,0)
     #ax.set_ylim(450,0)
-
-    plt.show()           
+    fig.savefig('data/{}/smeaheia_wod.png'.format(str(ncfile)[:-3]),transparent = False)
+    #plt.show()           
    
     
 def call_jossingfjorden():
@@ -613,7 +609,7 @@ def call_osterfjorden():
 #call_jossingfjorden()    
 
 call_smeaheia_2d()
-
+#call_smeaheia()
 
 #call_arctic()     
 #call_osterfjorden()    
