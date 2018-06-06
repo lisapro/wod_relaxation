@@ -1,0 +1,12 @@
+*.pyc
+*.nc
+*.png
+*.eps
+.project
+.pydevproject
+.settings/
+.vscode/
+/Figures
+/Data
+rest_functions.py
+
