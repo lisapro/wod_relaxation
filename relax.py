@@ -18,8 +18,7 @@ from matplotlib import gridspec as gs
 from scipy.interpolate import UnivariateSpline  
 from scipy import interpolate 
 from netCDF4 import Dataset,num2date, date2num
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
+
 from mpl_toolkits.basemap import Basemap
 import numpy as np       
 from datetime import datetime,time  
@@ -138,14 +137,14 @@ def choose_month(ds,m_num,var,clima_var_m,levels,double_int = False,int_num = 1)
                 for n in range(0,int_num):
                     f = interpolate.UnivariateSpline(levels,var_m,k=2)
                     var_m = f(levels)
-            print ("month with data num: ", m_num)        
+            #print ("month with data num: ", m_num)        
         else: 
             #print ('many nans',m_num,month_df[var])
             var_m = clima_var_m
     except:
         var_m = clima_var_m      
     return var_m,month_ds 
-       
+
 def create_relax_array(ncfile,varname,pl,save,levels,axis,int_num = 1, double_int = False,only_clima_mean = False):
     
     funcs = {'Oxygen':'var4', 'Temperature': 'var2',
@@ -274,415 +273,68 @@ def create_relax_array(ncfile,varname,pl,save,levels,axis,int_num = 1, double_in
                 
     return ds[var_from_odv], ds['var1'], np.array(means).T, np.array(depths).T
 
-def for_2d_interpolation(ncfile,varname,file,kxy = 1):
+
+def create_ranges(ncfile,varname,axis): 
+    #ncfile,varname,pl,save,levels,axis,
+    #int_num = 1, double_int = False,only_clima_mean = False):
     
-    fig  = plt.figure(figsize=(10,6), dpi=100 )    
-    gs = gridspec.GridSpec(2,2)
-    gs.update(left = 0.05,right = 0.97, hspace=0.4, wspace = 0.1)
-    axis = fig.add_subplot(gs[0]) 
-    axis2 = fig.add_subplot(gs[1]) 
-    axis3 = fig.add_subplot(gs[2]) 
-    axis4 = fig.add_subplot(gs[3]) 
-        
     funcs = {'Oxygen':'var4', 'Temperature': 'var2',
              'si':'var6','alk': 'var12','chl': 'var10',
              'po4':'var5', 'no3':'var7','pH': 'var9'}  
-    var_from_odv = funcs[varname] 
-    cmap = plt.get_cmap('rainbow')
-    
-    file.write('\n{}'.format(varname)) 
-    
+    var = funcs[varname] 
+     
     # read ncfile as xarray
-    ds = xr.open_dataset(ncfile)          
-    df = ds.to_dataframe()
-    df = df[df['var4'] > 3]
-    #df = df[df['var7'] < 50]    
-    df = df[df.date_time.dt.year > 1940]
-    df = df[df.date_time.dt.dayofyear != 129.]
-    #df = df.date_time.dropna(how='all')
+    ds = xr.open_dataset(ncfile)
+    ds = ds[['var4','var1','var2','var3','var5',
+             'var6','var7','var9','date_time',
+             'var12']]    
+    ds['var4'] = ds['var4']*44.6 
+    ds['var12'] = ds['var12'] * 1000     
+    ds = ds.where(ds.date_time.dt.year > 1950, drop=True)  
+    
+    # usually we don't need the data from all depths     
+    # get only data from 1960 and later 
+    if ncfile == 'data_from_WOD_COLLECTION_Laptev.nc':
+        ds = ds.where(ds.var5 < 1.2, drop=True)
+        ds = ds.where(ds.var6 < 40, drop=True)        
+    elif ncfile == 'data_from_WOD_COLLECTION_1500-1600_Smeaheia.nc': 
+        ds = ds.where(ds.var4 > 200, drop=True) 
+        #ds = ds.where(ds.var12 > 1200, drop=True) 
+        ds = ds.where(ds.var7 <15 , drop=True)    
+        ds = ds.where(ds.var1 < 360, drop=True)  
         
-    day_of_year = (np.array(df.date_time.dt.dayofyear.values)).flatten()  
-    day = (np.array(df.date_time.dt.date.values)).flatten() 
-    depth2 = (np.array(df['var1'])).flatten() 
-    var2 = (np.array(df[var_from_odv])).flatten()     
-  
-    if varname == 'Oxygen':
-        var2 = var2 * 44.6       
-    elif varname == 'alk':
-        var2 = var2*1000    
-    steps = {'Oxygen': 1,'si': 0.1 ,'alk': 1,'chl': 0.01,
-             'po4':0.1, 'no3': 0.1,'pH': 0.01}  
-    step = steps[varname]     
-                          
-    #Remove nans 
-    depth2_nan = depth2[~np.isnan(depth2)]      
-    var2_nan = var2[~np.isnan(depth2)]        
-    day_of_year_nan = day_of_year[~np.isnan(depth2)] 
-
-    depth2_nan = depth2_nan[~np.isnan(var2_nan)]      
-    var2_nan2 = var2_nan[~np.isnan(var2_nan)]        
-    day_of_year_nan = day_of_year_nan[~np.isnan(var2_nan)] 
+    ## dataframe for the range at the bottom 
+    dff = ds.to_dataframe() 
+    dff = dff[dff['var1']>250]  
+    #dff = dff[dff['var13']>1250]  
+    mask = (dff['var1'] > 200) & (dff['var7'] > 3)
+    mask2 = (dff.var12 > 1200) 
+    dff['var12'] = dff.ix[mask2,'var12']
     
-    vmax = np.nanmax(var2_nan2)
-    vmin = np.nanmin(var2_nan2)       
-    file.write('\nMax over the whole period = {}'.format(vmax))     
-    file.write('\nMin over the whole period = {}'.format(vmin))         
-      
-    gridsize = 2   
-    xi = np.arange(0,366,gridsize)
-    if varname == 'chl':
-        yi = np.arange(0,100,gridsize)          
-    else:        
-        yi = np.arange(0,370,gridsize)  
-
-         
-    X,Y = np.meshgrid(xi,yi) 
+    dff['var7'] = dff.ix[mask,'var7']
+    depth_group = dff.groupby(dff['var1'])   
+    mins_df = depth_group.min()
+    maxs_df = depth_group.max()
     
-    z_griddata = griddata((day_of_year_nan, depth2_nan),
-                   var2_nan2, (xi[None,:], yi[:,None]), method='linear')    
-          
-
-    ##f_int2d = interpolate.interp2d(day_of_year_nan,depth2_nan,var2_nan2)
-    ###zi_int2d = np.transpose(f_int2d(xi,yi)) 
-    f_biv_spline = interpolate.SmoothBivariateSpline(day_of_year_nan, depth2_nan, var2_nan2, kx=kxy, ky=kxy)   
-    z_biv_spline = np.transpose(f_biv_spline (xi,yi)) 
-
-    levels = np.arange(vmin,vmax,step)
-   
-    axis.set_title('Long-term variability, raw data')
-    for tick in axis.get_xticklabels():
-        tick.set_rotation(45)
-
-    CS = axis.scatter(df.date_time.dt.date.values, depth2 ,
-                      c = var2,alpha = 1,cmap = cmap,s = 5)   
-    plt.colorbar(CS, ax=axis)
-    
-    axis2.set_title('Seasonal variability, raw data')    
-    CS2 = axis2.scatter(day_of_year_nan, depth2_nan, c = var2_nan2,
-                         alpha = 1,cmap = cmap,s = 5,vmin = vmin, vmax = vmax)
-         
-    plt.colorbar(CS2, ax=axis2)     
-   
-    CS3 = axis3.scatter(X, Y,c = z_griddata,  alpha = 1,s = 1,cmap = cmap,vmin = vmin, vmax = vmax)
-    axis3.set_title('Seasonal variability, griddata')
-    
-    #CS3 = axis3.contourf(xi, yi,z_griddata,levels = levels ,cmap = cmap,vmin = vmin, vmax = vmax) 
-       
-    axis4.set_title('Seasonal variability, SmoothBivariateSpline')        
-    CS4 = axis4.contourf(xi,yi,z_biv_spline,levels = levels, cmap= cmap) #,vmin = vmin,vmax = vmax) 
-
-    if varname == 'pH': 
-        fig.suptitle(r'{}'.format(varname))      
-    else:
-        fig.suptitle(r'{} $\mu M$'.format(varname))
-    
-    plt.colorbar(CS3, ax=axis3)
-    plt.colorbar(CS4, ax=axis4)    
-    for axis in (axis,axis2,axis3,axis4):  
-        axis.set_ylim(370,0)
-        
-    for axis in (axis2,axis3,axis4):       
-        axis.set_xlim(0,365)
-        axis.set_xlabel('Day in a year')
-    #fig.savefig('data/{}/smeaheia_wod_2d_{}.png'.format(str(ncfile)[:-3],varname)) 
-    plt.show()
-    plt.clf()
-      
-def time_to_run():    
-    import timeit
-    start = timeit.default_timer()
-    stop = timeit.default_timer()
-    print ('Seconds',stop - start) 
-
-def call_arctic() :
-    
-    # open the file to get levels from the model , interpolation further will be to these levels 
-    dss = xr.open_dataset(r'C:\Users\elp\OneDrive\Python_workspace\arctic2030\Data\ROMS_Laptev_Sea_NETCDF3_CLASSIC_east_each_day.nc')
-    levels = sorted(dss.depth.values)
-    
-    fig  = plt.figure(figsize=(5,8), dpi=100 )
-    
-    gs = gridspec.GridSpec(3,2)
-    gs.update(hspace=0.3,top = 0.95,bottom = 0.05)
-    ax = fig.add_subplot(gs[0]) 
-    ax1 = fig.add_subplot(gs[1])
-    ax2 = fig.add_subplot(gs[2])     
-    ax3 = fig.add_subplot(gs[3])     
-    ax4 = fig.add_subplot(gs[4])     
-    ax5 = fig.add_subplot(gs[5])     
-   
-    ncfile = 'data_from_WOD_COLLECTION_Laptev.nc'    
-    create_relax_array(ncfile,'Oxygen',
-                       True, True, levels, ax,1,double_int = True, only_clima_mean = True) # Arctic
-    ax.set_title(r'O$_2\ \mu M$')  
-    create_relax_array(ncfile,'po4',
-                       True, True, levels,ax1,3, double_int = True, only_clima_mean =True) # Arctic,
-    ax1.set_title(r'PO$_4\ \mu M$') 
-    create_relax_array(ncfile,'si',
-                       True, True, levels,ax2,10, double_int = True, only_clima_mean = True) # Arctic
-    ax2.set_title(r'Si $\mu M$') 
-    create_relax_array(ncfile,'no3',
-                       True, True, levels,ax3, 3, double_int = True, only_clima_mean = True) # Arctic
-    ax3.set_title(r'NO$_3\ \mu M$') 
-    create_relax_array(ncfile,'alk',
-                       True, True, levels,ax4, 1, double_int = True, only_clima_mean = True) # Arctic
-    ax4.set_title(r'Alkalinity $\mu M$') 
-    create_relax_array(ncfile,'pH',
-                       True, True, levels,ax5, 3, double_int = True, only_clima_mean = True) # Arctic    
-    ax5.set_title(r'pH') 
-    #plt.show()
-    for axis in (ax,ax1,ax2,ax3,ax4,ax5):
-        axis.set_ylim(90,0)
-    plt.savefig('data/{}/arctic_wod.png'.format(str(ncfile)[:-3])) 
-
-def call_smeaheia_2d():
-    ncfile = 'data_from_WOD_COLLECTION_1500-1600_Smeaheia.nc'
-    file = open('data/data_from_WOD_COLLECTION_1500-1600_Smeaheia/smeaheia_Statistics_file.txt','w')    
-    #call_smeaheia('2d','po4')
-    #call_smeaheia()
-    
-    #plt.savefig('data/{}/smeaheia_wod.png'.format(str(ncfile)[:-3]))
-    for_2d_interpolation(ncfile,'po4',file,1)
-    '''for_2d_interpolation(ncfile,'Oxygen',file,1)
-    
-    for_2d_interpolation(ncfile,'pH',file,3)
-    for_2d_interpolation(ncfile,'si',file,2)
-    for_2d_interpolation(ncfile,'alk',file,1)   
-    for_2d_interpolation(ncfile,'chl',file,1) 
-    for_2d_interpolation(ncfile,'no3',file,1)'''
-   
-    #for_2d_interpolation(ncfile,'po4',ax,ax1,ax2,ax3,file)
-    #fig.suptitle(r'PO $_4\ \mu M$')
-    #
-            
-    #axis3.set_title('griddata int gridsize = {}'.format(gridsize))
-    
-      
-    file.close()
-    
-def call_smeaheia() :
-    ncfile = 'data_from_WOD_COLLECTION_1500-1600_Smeaheia.nc'
-    levels = np.arange(0,300,2)
-    save = False
-     
-    fig  = plt.figure(figsize=(10,6), dpi=100 )    
-    gs = gridspec.GridSpec(2,3)
-    gs.update(left = 0.04, right = 0.97,hspace=0.3)
-    ax = fig.add_subplot(gs[0]) 
-    ax1 = fig.add_subplot(gs[1])
-    ax2 = fig.add_subplot(gs[2])     
-    ax3 = fig.add_subplot(gs[3])     
-    ax4 = fig.add_subplot(gs[4])     
-    ax5 = fig.add_subplot(gs[5])     
-        
-    create_relax_array(ncfile,'Oxygen',
-                       True, save, levels, ax,1,double_int = True, only_clima_mean = False) 
-    ax.set_title(r'O$_2\ \mu M$')   
-    #ax.legend(['mean','1','2','3','4','5','6','7','8','9','10','11','12'])
-    #ax.legend()
-     
-    create_relax_array(ncfile,'po4',
-                       True, save, levels,ax1,1, double_int = True,only_clima_mean =False)
-    ax1.set_title(r'PO$_4\ \mu M$') 
-    create_relax_array(ncfile,'si',
-                       True, save, levels,ax2,3 , double_int = True,only_clima_mean = False) 
-    ax2.set_title(r'Si $ \mu M$') 
-    ax2.set_xlim(0,12)
-    create_relax_array(ncfile,'no3',
-                       True, save, levels,ax3, 6, double_int = True,only_clima_mean = False)
-    ax3.set_title(r'NO$_3\ \mu M$') 
-    create_relax_array(ncfile,'alk',
-                       True, save, levels,ax4, 1, double_int = True,only_clima_mean = False) 
-    ax4.set_title(r'Alkalinity $\mu M$') 
-    ax4.set_xlim(1900,2600)
-    create_relax_array(ncfile,'pH',
-                       True, save, levels,ax5, 1, double_int = True,only_clima_mean = False) 
-    ax5.set_title(r'pH') 
-
-    for axis in (ax,ax1,ax2,ax3,ax4,ax5):
-        axis.set_ylim(450,0)
-    #ax.set_ylim(450,0)
-    fig.savefig('data/{}/smeaheia_wod.png'.format(str(ncfile)[:-3]),transparent = False)
-    #plt.show()           
-   
-    
-def call_jossingfjorden():
-    levels = (0,5,10,20,30,50,75,100,125,150,165) #
-    fig  = plt.figure(figsize=(10,6), dpi=100 )
-
-    ncfile = 'jossingfjorden-wod.nc'
-    gs = gridspec.GridSpec(3,3)
-    gs.update(hspace=0.3)
-    ax = fig.add_subplot(gs[0]) 
-    ax1 = fig.add_subplot(gs[1])
-    ax2 = fig.add_subplot(gs[2])     
-    ax3 = fig.add_subplot(gs[3])     
-    ax4 = fig.add_subplot(gs[4])     
-    ax5 = fig.add_subplot(gs[5])
-    ax6 = fig.add_subplot(gs[6])    
-    
-    create_relax_array(ncfile,'Oxygen',
-                       True, True, levels, ax,1,double_int = True, only_clima_mean = False) 
-    ax.set_title(r'O$_2\ \mu M$')     
-    create_relax_array(ncfile,'po4',
-                       True, True, levels,ax1,1, double_int = True,only_clima_mean =False)
-    ax1.set_title(r'PO$_4\ \mu M$') 
-    create_relax_array(ncfile,'si',
-                       True, True, levels,ax2,1 , double_int = True,only_clima_mean = False) 
-    ax2.set_title(r'Si $ \mu M$') 
-    ax2.set_xlim(0,12)
-    create_relax_array(ncfile,'no3',
-                       True, True, levels,ax3,1, double_int = True,only_clima_mean = False)
-    ax3.set_title(r'NO$_3\ \mu M$') 
-    create_relax_array(ncfile,'alk',
-                       True, True, levels,ax4, 1, double_int = True,only_clima_mean = False) 
-    ax4.set_title(r'Alkalinity $\mu M$') 
-     
-    create_relax_array(ncfile,'pH',
-                           True, True, levels,ax5,1, double_int = True,only_clima_mean = False)  
-    ax5.set_title(r'pH') 
-    
-    create_relax_array(ncfile,'chl',
-                           True, True, levels,ax6,1, double_int = False ,only_clima_mean = False)     
-    ax6.set_title(r'Chlorophyll')
-    ax6.set_xlim(0,10)
-    for axis in (ax,ax1,ax2,ax3,ax4,ax5,ax6):
-        axis.set_ylim(170,0)        
-    #plt.show()  
-    plt.savefig('data/{}/jossingsfjorden_wod.png'.format(str(ncfile)[:-3])) 
-    
+    if (var == 'var9') or (var == 'var12')  :
+        mins_df[var] = mins_df[var].rolling(3).min().interpolate()
+        maxs_df[var] = maxs_df[var].rolling(3).max().interpolate()          
+        mins_median = mins_df[var].rolling(4).median()
+        maxs_median = maxs_df[var].rolling(4).median()
+        mi = np.around(mins_median.min(),decimals = 2) 
+        mx = np.around(maxs_median.max(),decimals = 2)
+    else: 
+        mins_df[var] = mins_df[var].rolling(5).min().interpolate()
+        maxs_df[var] = maxs_df[var].rolling(5).max().interpolate()   
+        mins_median = mins_df[var].rolling(20).median() 
+        maxs_median = maxs_df[var].rolling(20).median() 
+        mi = np.around(mins_median.min(),decimals = 2) 
+        mx = np.around(maxs_median.max(),decimals = 2)
+    print (var,mi,mx)        
+    axis.fill_betweenx(maxs_df.index.values, mi,
+                      mx,alpha= 0.3,zorder =10)
+    axis.scatter(ds[var],ds['var1'],alpha = 0.3, c = '#7f7f7f' ) 
 
 
 
-def call_osterfjorden():
-
-    ncfile = 'modest-wod.nc'
     
-    #map_of_stations(ncfile,60.5,5.3,'Osterfjorden','i')
-    levels = np.arange(0,600,2) #(0,5,10,20,30,50,75,100,125,150,165) #
-    fig  = plt.figure(figsize=(10,6), dpi=100 )
-
-    gs = gridspec.GridSpec(3,2)
-    gs.update(hspace=0.3)
-    ax = fig.add_subplot(gs[0]) 
-    ax1 = fig.add_subplot(gs[1])
-    ax2 = fig.add_subplot(gs[2])     
-    ax3 = fig.add_subplot(gs[3])     
-    ax4 = fig.add_subplot(gs[4])     
-    ax5 = fig.add_subplot(gs[5])
-    #ax6 = fig.add_subplot(gs[6])    
-    
-    create_relax_array(ncfile,'Oxygen',
-                       True, True, levels, ax,1,double_int = True, only_clima_mean = False) 
-    ax.set_title(r'O$_2\ \mu M$')     
-    create_relax_array(ncfile,'po4',
-                       True, True, levels,ax1,1, double_int = True,only_clima_mean =False)
-    ax1.set_title(r'PO$_4\ \mu M$') 
-    create_relax_array(ncfile,'si',
-                       True, True, levels,ax2,2 , double_int = True,only_clima_mean = False) 
-    ax2.set_title(r'Si $ \mu M$') 
-    ax2.set_xlim(0,12)
-    
-    create_relax_array(ncfile,'no3',
-                       True, True, levels,ax3,4, double_int = True,only_clima_mean = False)
-    
-    ax3.set_title(r'NO$_3\ \mu M$') 
-    
-    create_relax_array(ncfile,'alk',
-                       True, True, levels,ax4, 1, double_int = False,only_clima_mean = False) 
-    
-    ax4.set_title(r'Alkalinity $\mu M$') 
-     
-    create_relax_array(ncfile,'pH',
-                           True, True, levels,ax5,1, double_int = True,only_clima_mean = False)  
-    ax5.set_title(r'pH') 
-    
-    #create_relax_array(ncfile,'chl',
-    #                       True, True, levels,ax6,1, double_int = True ,only_clima_mean = False)     
-    #ax6.set_title(r'Chlorophyll')
-    #ax6.set_xlim(0,10)
-    for axis in (ax,ax1,ax2,ax3,ax4,ax5):
-        axis.set_ylim(600,0)        
-    #plt.show()  
-    plt.savefig('data/{}/Osterfjorden_wod.png'.format(str(ncfile)[:-3]))    
-
-def call_wadden():
-    ncfile = 'wadden_sea.nc'
-    #depth = 
-    levels = np.arange(0,40,1)
-    save = False
-     
-    fig  = plt.figure(figsize=(10,6), dpi=100 )    
-    gs = gridspec.GridSpec(2,3)
-    gs.update(left = 0.04, right = 0.97,hspace=0.3)
-    ax = fig.add_subplot(gs[0]) 
-    ax1 = fig.add_subplot(gs[1])
-    ax2 = fig.add_subplot(gs[2])     
-    ax3 = fig.add_subplot(gs[3])     
-    ax4 = fig.add_subplot(gs[4])     
-    ax5 = fig.add_subplot(gs[5])     
-        
-    create_relax_array(ncfile,'Oxygen',
-                       True, save, levels, ax,1,double_int = True, only_clima_mean = False) 
-    ax.set_title(r'O$_2\ \mu M$')   
-    #ax.legend(['mean','1','2','3','4','5','6','7','8','9','10','11','12'])
-    #ax.legend()
-     
-    create_relax_array(ncfile,'po4',
-                       True, save, levels,ax1,1, double_int = True,only_clima_mean =False)
-    ax1.set_title(r'PO$_4\ \mu M$') 
-    create_relax_array(ncfile,'si',
-                       True, save, levels,ax2,3 , double_int = True,only_clima_mean = False) 
-    ax2.set_title(r'Si $ \mu M$') 
-    #ax2.set_xlim(0,12)
-    create_relax_array(ncfile,'no3',
-                       True, save, levels,ax3, 6, double_int = True,only_clima_mean = False)
-    ax3.set_title(r'NO$_3\ \mu M$') 
-    create_relax_array(ncfile,'alk',
-                       True, save, levels,ax4, 1, double_int = True,only_clima_mean = False) 
-    ax4.set_title(r'Alkalinity $\mu M$') 
-    #ax4.set_xlim(1900,2600)
-    create_relax_array(ncfile,'pH',
-                       True, save, levels,ax5, 1, double_int = True,only_clima_mean = False) 
-    ax5.set_title(r'pH') 
-    
-    for axis in (ax,ax1,ax2,ax3,ax4,ax5):
-        axis.set_ylim(40,0)
-    #ax.set_ylim(450,0)
-    #fig.savefig('data/{}/waddensea_wod.png'.format(str(ncfile)[:-3]),transparent = False)
-    plt.show()  
-             
-def call_wadden_2d():
-    ncfile = 'wadden_sea.nc'
-    #depth = 
-    levels = np.arange(0,40,1)
-    file = open('data/dwadden_sea.txt','w')    
-    #call_smeaheia('2d','po4')
-    #call_smeaheia()
-    
-    #plt.savefig('data/{}/smeaheia_wod.png'.format(str(ncfile)[:-3]))
-    for_2d_interpolation(ncfile,'po4',file,1)
-    '''for_2d_interpolation(ncfile,'Oxygen',file,1)
-    
-    for_2d_interpolation(ncfile,'pH',file,3)
-    for_2d_interpolation(ncfile,'si',file,2)
-    for_2d_interpolation(ncfile,'alk',file,1)   
-    for_2d_interpolation(ncfile,'chl',file,1) 
-    for_2d_interpolation(ncfile,'no3',file,1)'''
-   
-    #for_2d_interpolation(ncfile,'po4',ax,ax1,ax2,ax3,file)
-    #fig.suptitle(r'PO $_4\ \mu M$')
-    #
-            
-    #axis3.set_title('griddata int gridsize = {}'.format(gridsize))
-    
-      
-    file.close()   
-#call_jossingfjorden()    
-
-#call_smeaheia_2d()
-#call_smeaheia()
-call_wadden_2d()
-#call_arctic()     
-#call_osterfjorden()    
-#create_relax_array('goldeneye-wod.nc','po4',True, False, levels, double_int = True) #
